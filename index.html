@@ -31,26 +31,31 @@
         Papa.parse('RAW_met_lieux_inclusion_numerique.csv', {
             download: true,
             header: true,
-            delimiter: ";",
+            // Suppression du delimiter fixe pour laisser PapaParse détecter (;) ou (\t)
             skipEmptyLines: true,
             complete: function(results) {
-                console.log("Données chargées :", results.data.length, "lignes");
+                console.log("Fichier chargé. Nombre de lignes :", results.data.length);
+                if (results.data.length > 0) {
+                    console.log("Colonnes détectées :", Object.keys(results.data[0]));
+                }
+
                 const markers = [];
                 
                 results.data.forEach((row, index) => {
-                    // Nettoyage des clés (pour gérer le BOM ou les espaces)
+                    // Nettoyage des clés (BOM, espaces, etc.)
                     let cleanRow = {};
                     Object.keys(row).forEach(key => {
-                        cleanRow[key.trim().replace(/^\uFEFF/, "")] = row[key];
+                        const cleanKey = key.trim().replace(/^\uFEFF/, "");
+                        if (cleanKey) cleanRow[cleanKey] = row[key];
                     });
 
                     let lat = parseFloat(cleanRow.latitude);
                     let lng = parseFloat(cleanRow.longitude);
 
-                    // Tentative via geo_point si lat/lng sont vides
+                    // Fallback sur geo_point si nécessaire
                     if ((isNaN(lat) || isNaN(lng)) && cleanRow.geo_point) {
-                        const coords = cleanRow.geo_point.split(',');
-                        if (coords.length === 2) {
+                        const coords = cleanRow.geo_point.split(/[,;]/);
+                        if (coords.length >= 2) {
                             lat = parseFloat(coords[0].trim());
                             lng = parseFloat(coords[1].trim());
                         }
@@ -67,21 +72,21 @@
                             `);
                         markers.push(marker);
                         marker.addTo(map);
-                    } else if (index < 5) {
-                        console.warn("Ligne ignorée (coordonnées invalides) :", cleanRow);
                     }
                 });
 
+                console.log("Total marqueurs valides :", markers.length);
+
                 if (markers.length > 0) {
-                    console.log(markers.length + " marqueurs ajoutés.");
                     const group = new L.featureGroup(markers);
                     map.fitBounds(group.getBounds().pad(0.1));
                 } else {
-                    console.error("Aucun marqueur n'a pu être créé. Vérifiez le format du CSV.");
+                    console.error("Aucune coordonnée valide n'a été trouvée dans le fichier.");
+                    alert("Erreur : Aucun point trouvé. Vérifiez la console (F12) pour plus de détails.");
                 }
             },
             error: function(err) {
-                console.error("Erreur lors du chargement du CSV:", err);
+                console.error("Erreur PapaParse:", err);
             }
         });
     </script>
