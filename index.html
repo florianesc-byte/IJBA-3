@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" style="height: 100%;">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Carte des lieux d'inclusion numérique</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100vw; }
-        .leaflet-popup-content-wrapper { font-family: sans-serif; }
+        html, body { height: 100%; margin: 0; padding: 0; }
+        #map { height: 100%; width: 100%; }
+        .legend { background: white; padding: 10px; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
@@ -17,47 +17,44 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script>
-        // Initialisation de la carte (vue par défaut sur Bordeaux)
+        console.log("Initialisation de la carte...");
         const map = L.map('map').setView([44.837789, -0.57918], 13);
 
-        // Utilisation de CartoDB Positron (alternative gratuite et épurée à OSM)
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
             subdomains: 'abcd',
             maxZoom: 20
         }).addTo(map);
 
-        // Chargement du CSV directement
-        Papa.parse('RAW_met_lieux_inclusion_numerique.csv', {
+        const csvUrl = 'RAW_met_lieux_inclusion_numerique.csv';
+
+        Papa.parse(csvUrl, {
             download: true,
             header: true,
-            // Suppression du delimiter fixe pour laisser PapaParse détecter (;) ou (\t)
             skipEmptyLines: true,
             complete: function(results) {
-                console.log("Fichier chargé. Nombre de lignes :", results.data.length);
-                if (results.data.length > 0) {
-                    console.log("Colonnes détectées :", Object.keys(results.data[0]));
-                }
-
+                console.log("Fichier CSV chargé avec succès.");
+                console.log("Lignes brutes :", results.data.length);
+                
                 const markers = [];
                 
                 results.data.forEach((row, index) => {
-                    // Nettoyage des clés (BOM, espaces, etc.)
-                    let cleanRow = {};
-                    Object.keys(row).forEach(key => {
+                    // Nettoyage des clés (BOM, espaces)
+                    const cleanRow = {};
+                    for (let key in row) {
                         const cleanKey = key.trim().replace(/^\uFEFF/, "");
-                        if (cleanKey) cleanRow[cleanKey] = row[key];
-                    });
+                        cleanRow[cleanKey] = row[key];
+                    }
 
                     let lat = parseFloat(cleanRow.latitude);
                     let lng = parseFloat(cleanRow.longitude);
 
-                    // Fallback sur geo_point si nécessaire
+                    // Si lat/lng ne sont pas des nombres, on tente geo_point
                     if ((isNaN(lat) || isNaN(lng)) && cleanRow.geo_point) {
-                        const coords = cleanRow.geo_point.split(/[,;]/);
-                        if (coords.length >= 2) {
-                            lat = parseFloat(coords[0].trim());
-                            lng = parseFloat(coords[1].trim());
+                        const parts = cleanRow.geo_point.split(/[,;]/);
+                        if (parts.length >= 2) {
+                            lat = parseFloat(parts[0].trim());
+                            lng = parseFloat(parts[1].trim());
                         }
                     }
 
@@ -75,18 +72,19 @@
                     }
                 });
 
-                console.log("Total marqueurs valides :", markers.length);
+                console.log("Marqueurs valides ajoutés :", markers.length);
 
                 if (markers.length > 0) {
                     const group = new L.featureGroup(markers);
                     map.fitBounds(group.getBounds().pad(0.1));
                 } else {
-                    console.error("Aucune coordonnée valide n'a été trouvée dans le fichier.");
-                    alert("Erreur : Aucun point trouvé. Vérifiez la console (F12) pour plus de détails.");
+                    console.error("Aucune coordonnée valide trouvée.");
+                    alert("Attention : Le fichier CSV a été lu mais aucun point n'a pu être placé sur la carte. Vérifiez les colonnes 'latitude' et 'longitude'.");
                 }
             },
             error: function(err) {
-                console.error("Erreur PapaParse:", err);
+                console.error("Erreur lors du téléchargement du CSV :", err);
+                alert("Impossible de charger le fichier CSV (" + csvUrl + "). Vérifiez qu'il est bien présent sur GitHub.");
             }
         });
     </script>
