@@ -32,29 +32,52 @@
             download: true,
             header: true,
             delimiter: ";",
+            skipEmptyLines: true,
             complete: function(results) {
+                console.log("Données chargées :", results.data.length, "lignes");
                 const markers = [];
-                results.data.forEach(row => {
-                    const lat = parseFloat(row.latitude);
-                    const lng = parseFloat(row.longitude);
+                
+                results.data.forEach((row, index) => {
+                    // Nettoyage des clés (pour gérer le BOM ou les espaces)
+                    let cleanRow = {};
+                    Object.keys(row).forEach(key => {
+                        cleanRow[key.trim().replace(/^\uFEFF/, "")] = row[key];
+                    });
+
+                    let lat = parseFloat(cleanRow.latitude);
+                    let lng = parseFloat(cleanRow.longitude);
+
+                    // Tentative via geo_point si lat/lng sont vides
+                    if ((isNaN(lat) || isNaN(lng)) && cleanRow.geo_point) {
+                        const coords = cleanRow.geo_point.split(',');
+                        if (coords.length === 2) {
+                            lat = parseFloat(coords[0].trim());
+                            lng = parseFloat(coords[1].trim());
+                        }
+                    }
 
                     if (!isNaN(lat) && !isNaN(lng)) {
                         const marker = L.marker([lat, lng])
                             .bindPopup(`
-                                <strong>${row.nom || 'Sans nom'}</strong><br>
-                                ${row.structure_porteuse ? '<em>' + row.structure_porteuse + '</em><br>' : ''}
-                                ${row.adresse_brut || ''}<br>
+                                <strong>${cleanRow.nom || 'Sans nom'}</strong><br>
+                                ${cleanRow.structure_porteuse ? '<em>' + cleanRow.structure_porteuse + '</em><br>' : ''}
+                                ${cleanRow.adresse_brut || ''}<br>
                                 <br>
-                                <small>${row.type_lieu || ''}</small>
+                                <small>${cleanRow.type_lieu || ''}</small>
                             `);
                         markers.push(marker);
                         marker.addTo(map);
+                    } else if (index < 5) {
+                        console.warn("Ligne ignorée (coordonnées invalides) :", cleanRow);
                     }
                 });
 
                 if (markers.length > 0) {
+                    console.log(markers.length + " marqueurs ajoutés.");
                     const group = new L.featureGroup(markers);
                     map.fitBounds(group.getBounds().pad(0.1));
+                } else {
+                    console.error("Aucun marqueur n'a pu être créé. Vérifiez le format du CSV.");
                 }
             },
             error: function(err) {
